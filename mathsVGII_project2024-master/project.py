@@ -273,24 +273,76 @@ class Arcball(customtkinter.CTk):
             self.pressed = True # Bool to control(activate) a drag (click+move)
 
 
-    def onmove(self,event):
+    def onmove(self, event):
         """
         Event triggered function on the event of a mouse motion
         """
         
-        #Example
-        if self.pressed: #Only triggered if previous click
-            x_fig,y_fig= self.canvas_coordinates_to_figure_coordinates(event.x,event.y) #Extract viewport coordinates
+        if self.pressed:  # Only triggered if previous click
+            x_fig, y_fig = self.canvas_coordinates_to_figure_coordinates(event.x, event.y)  # Extract viewport coordinates
             
-            print("x: ", x_fig)
-            print("y", y_fig)
-            print("r2", x_fig*x_fig+y_fig*y_fig)
+            # Map the 2D coordinates to a point on the sphere using Holroyd's arcball
+            r = 1.0  # Radius of the sphere
+            x2 = x_fig
+            y2 = y_fig
+            
+            # Calculate z coordinate based on Holroyd's arcball mapping
+            if x2**2 + y2**2 < (0.5 * r)**2:
+                z2 = np.sqrt(r**2 - x2**2 - y2**2)
+            else:
+                z2 = (r**2) / (2 * np.sqrt(x2**2 + y2**2))
+            
+            # Create the new vector from the mapped coordinates
+            m1 = np.array([[self.M[0, 0]], [self.M[1, 0]], [self.M[2, 0]]])  # Initial vector (you may want to store this when the mouse is pressed)
+            m2 = np.array([[x2], [y2], [z2]])  # New vector
 
-            R = np.array([[0, 1, 0], [-1, 0, 0], [0, 0, 1]])
-                    
-            self.M = R.dot(self.M) #Modify the vertices matrix with a rotation matrix M
+            # Normalize the vectors
+            m1 = m1 / np.linalg.norm(m1)
+            m2 = m2 / np.linalg.norm(m2)
 
-            self.update_cube() #Update the cube
+            # Calculate the quaternion that rotates m1 to m2
+            theta = np.arccos(np.clip(np.dot(m1.flatten(), m2.flatten()), -1.0, 1.0))  # Angle between the two vectors
+            if np.isclose(theta, 0):
+                quat = np.array([[1], [0], [0], [0]])  # No rotation
+            else:
+                axis = np.cross(m1.flatten(), m2.flatten())
+                axis = axis / np.linalg.norm(axis)  # Normalize the axis
+                quat = np.array([[np.cos(theta / 2)],
+                                [axis[0] * np.sin(theta / 2)],
+                                [axis[1] * np.sin(theta / 2)],
+                                [axis[2] * np.sin(theta / 2)]])
+
+            # Update the quaternion and other representations
+            self.quat = quat
+            R = self.quaternion_to_rotation_matrix(self.quat)
+            self.rotM = R
+
+            self.M = R.dot(self.M)
+
+            self.update_cube()  # Call to update the cube with the new rotation
+    
+    def quaternion_to_rotation_matrix(self, quat):
+        """
+        Convert a quaternion to a rotation matrix.
+        
+        Parameters:
+        quat : numpy array
+            A 4x1 array representing the quaternion (q0, q1, q2, q3).
+        
+        Returns:
+        R : numpy array
+            A 3x3 rotation matrix.
+        """
+        q0, q1, q2, q3 = quat.flatten()  # Unpack the quaternion
+
+        # Calculate the rotation matrix
+        R = np.array([
+            [1 - 2 * (q2**2 + q3**2), 2 * (q1 * q2 - q0 * q3), 2 * (q1 * q3 + q0 * q2)],
+            [2 * (q1 * q2 + q0 * q3), 1 - 2 * (q1**2 + q3**2), 2 * (q2 * q3 - q0 * q1)],
+            [2 * (q1 * q3 - q0 * q2), 2 * (q2 * q3 + q0 * q1), 1 - 2 * (q1**2 + q2**2)]
+        ])
+        
+        return R
 
 
     def onrelease(self,event):
