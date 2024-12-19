@@ -277,7 +277,6 @@ class Arcball(customtkinter.CTk):
         """
         Event triggered function on the event of a mouse motion
         """
-        
         if self.pressed:  # Only triggered if previous click
             x_fig, y_fig = self.canvas_coordinates_to_figure_coordinates(event.x, event.y)  # Extract viewport coordinates
             
@@ -287,62 +286,57 @@ class Arcball(customtkinter.CTk):
             y2 = y_fig
             
             # Calculate z coordinate based on Holroyd's arcball mapping
-            if x2**2 + y2**2 < (0.5 * r)**2:
+            if x2**2 + y2**2 < r**2:
                 z2 = np.sqrt(r**2 - x2**2 - y2**2)
             else:
-                z2 = (r**2) / (2 * np.sqrt(x2**2 + y2**2))
+                z2 = r / (2 * np.sqrt(x2**2 + y2**2))
             
             # Create the new vector from the mapped coordinates
-            m1 = np.array([[self.M[0, 0]], [self.M[1, 0]], [self.M[2, 0]]])  # Initial vector (you may want to store this when the mouse is pressed)
-            m2 = np.array([[x2], [y2], [z2]])  # New vector
+            m2 = np.array([x2, y2, z2])  # New vector
 
-            # Normalize the vectors
-            m1 = m1 / np.linalg.norm(m1)
+            # Normalize the vector
             m2 = m2 / np.linalg.norm(m2)
 
+            # If this is the first movement after pressing, initialize m1
+            if not hasattr(self, 'm1') or self.m1 is None:
+                self.m1 = m2
+
             # Calculate the quaternion that rotates m1 to m2
-            theta = np.arccos(np.clip(np.dot(m1.flatten(), m2.flatten()), -1.0, 1.0))  # Angle between the two vectors
+            theta = np.arccos(np.clip(np.dot(self.m1, m2), -1.0, 1.0))  # Angle between the two vectors
             if np.isclose(theta, 0):
-                quat = np.array([[1], [0], [0], [0]])  # No rotation
+                quat = np.array([1, 0, 0, 0])  # No rotation
             else:
-                axis = np.cross(m1.flatten(), m2.flatten())
+                axis = np.cross(self.m1, m2)
                 axis = axis / np.linalg.norm(axis)  # Normalize the axis
-                quat = np.array([[np.cos(theta / 2)],
-                                [axis[0] * np.sin(theta / 2)],
-                                [axis[1] * np.sin(theta / 2)],
-                                [axis[2] * np.sin(theta / 2)]])
+                quat = np.array([
+                    np.cos(theta / 2),
+                    axis[0] * np.sin(theta / 2),
+                    axis[1] * np.sin(theta / 2),
+                    axis[2] * np.sin(theta / 2)
+                ])
 
             # Update the quaternion and other representations
             self.quat = quat
             R = self.quaternion_to_rotation_matrix(self.quat)
             self.rotM = R
 
-            self.M = R.dot(self.M)
+            # Apply the new rotation to the current transformation matrix
+            self.M = R @ self.M
+
+            # Update m1 for the next rotation
+            self.m1 = m2
 
             self.update_cube()  # Call to update the cube with the new rotation
+
+
     
     def quaternion_to_rotation_matrix(self, quat):
-        """
-        Convert a quaternion to a rotation matrix.
-        
-        Parameters:
-        quat : numpy array
-            A 4x1 array representing the quaternion (q0, q1, q2, q3).
-        
-        Returns:
-        R : numpy array
-            A 3x3 rotation matrix.
-        """
-        q0, q1, q2, q3 = quat.flatten()  # Unpack the quaternion
-
-        # Calculate the rotation matrix
-        R = np.array([
-            [1 - 2 * (q2**2 + q3**2), 2 * (q1 * q2 - q0 * q3), 2 * (q1 * q3 + q0 * q2)],
-            [2 * (q1 * q2 + q0 * q3), 1 - 2 * (q1**2 + q3**2), 2 * (q2 * q3 - q0 * q1)],
-            [2 * (q1 * q3 - q0 * q2), 2 * (q2 * q3 + q0 * q1), 1 - 2 * (q1**2 + q2**2)]
+        w, x, y, z = quat.flatten()
+        return np.array([
+            [1 - 2 * (y**2 + z**2), 2 * (x*y - z*w), 2 * (x*z + y*w)],
+            [2 * (x*y + z*w), 1 - 2 * (x**2 + z**2), 2 * (y*z - x*w)],
+            [2 * (x*z - y*w), 2 * (y*z + x*w), 1 - 2 * (x**2 + y**2)]
         ])
-        
-        return R
 
 
     def onrelease(self,event):
