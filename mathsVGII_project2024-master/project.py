@@ -11,7 +11,7 @@ customtkinter.set_appearance_mode("Dark")  # Modes: "System" (standard), "Dark",
 customtkinter.set_default_color_theme("dark-blue")  # Themes: "blue" (standard), "green", "dark-blue"
 
 
-def rotMat2Eaa(R):
+def return_Axis_Amgle(R):
     '''
     Returns the principal axis and angle encoded in the rotation matrix R
     '''
@@ -39,215 +39,183 @@ def rotMat2Eaa(R):
     return axis, angle
 
 
-def eAngles2rotM(yaw,pitch,roll): #psi, theta, phi
-    '''
-    Given a set of Euler angles returns the rotation matrix R
-    '''
-    R_x = np.array([[1,         0,                  0            ],
-                    [0,         math.cos(roll), math.sin(roll) ],
-                    [0,         -math.sin(roll), math.cos(roll)  ]
-                    ])
- 
-    R_y = np.array([[math.cos(pitch),    0,      -math.sin(pitch)  ],
-                    [0,                     1,      0             ],
-                    [math.sin(pitch),   0,      math.cos(pitch)  ]])
- 
-    R_z = np.array([[math.cos(yaw),    math.sin(yaw),    0],
-                    [-math.sin(yaw),    math.cos(yaw),     0],
-                    [0,                     0,            1]])
-    
- 
-    R = R_z@R_y@R_x 
-    
-    return R
+def Euler_Angles_to_Rot(yaw,pitch,roll): #psi, theta, phi
+    """
+    Converts Euler angles to a rotation matrix.
+    Parameters:
+        yaw (float): Rotation angle around the Z-axis (in radians).
+        pitch (float): Rotation angle around the Y-axis (in radians).
+        roll (float): Rotation angle around the X-axis (in radians).
+    Returns:
+        np.ndarray: A 3x3 rotation matrix.
+    """
+    # Rotation around the X-axis
+    rot_x = np.array([
+        [1, 0, 0],
+        [0, math.cos(roll), -math.sin(roll)],
+        [0, math.sin(roll), math.cos(roll)]
+    ])
 
-def rotM2eAngles(R): #psi, theta, phi
-    '''
-    Given a rotation matrix R returns a set of Euler angles 
-    '''
-    if R[2,0]==1:
-      pitch = math.asin(R[2][0])
-      roll = 0
-      yaw = -R[1,1]
-    elif R[2,0]==-1:
-      pitch = math.asin(R[2][0])
-      roll = 0
-      yaw = R[1,1]
+    # Rotation around the Y-axis
+    rot_y = np.array([
+        [math.cos(pitch), 0, math.sin(pitch)],
+        [0, 1, 0],
+        [-math.sin(pitch), 0, math.cos(pitch)]
+    ])
+
+    # Rotation around the Z-axis
+    rot_z = np.array([
+        [math.cos(yaw), -math.sin(yaw), 0],
+        [math.sin(yaw), math.cos(yaw), 0],
+        [0, 0, 1]
+    ])
+
+    # Combine the rotations in the order Z -> Y -> X
+    rotation_matrix = np.dot(np.dot(rot_z, rot_y), rot_x)
+
+    return rotation_matrix
+
+def rotMa_To_Yaw_Pitch_Roll(matrix): #psi, theta, phi
+    """
+    Extracts Euler angles (yaw, pitch, roll) from a given rotation matrix.
+
+    Parameters:
+        matrix (np.ndarray): A 3x3 rotation matrix.
+
+    Returns:
+        tuple: Yaw, pitch, and roll angles (in radians).
+    """
+    # Handle edge cases for gimbal lock
+    if matrix[2, 0] == 1:
+        pitch = math.pi / 2
+        yaw = math.atan2(matrix[0, 1], matrix[0, 2])
+        roll = 0
+    elif matrix[2, 0] == -1:
+        pitch = -math.pi / 2
+        yaw = math.atan2(-matrix[0, 1], -matrix[0, 2])
+        roll = 0
     else:
-      pitch = math.asin(R[2][0]) 
-      roll = -math.atan2(-R[2,1]/math.cos(pitch) , R[2,2]/math.cos(pitch) )
-      yaw = -math.atan2(-R[1,0]/math.cos(pitch), R[0,0]/math.cos(pitch) )
+        pitch = math.asin(matrix[2, 0])
+        roll = math.atan2(-matrix[2, 1], matrix[2, 2])
+        yaw = math.atan2(-matrix[1, 0], matrix[0, 0])
 
-    return (yaw, pitch, roll)
+    return yaw, pitch, roll
 
 
-def rot_vecToRotM(rot_vec):    
+def vector_to_RotMa(vector):    
+    # Obtener la magnitud del vector y el eje de rotación
+    norm = Magnitude(vector)
+    unit_axis = vector / norm
 
-    # Convertir ángulos de grados a radianes
-    magnitud= magnitude(rot_vec)
-    axis=rot_vec/magnitud
+    theta = norm  # Ángulo de rotación
 
-    angle=magnitud
+    cos_theta = math.cos(theta)
+    sin_theta = math.sin(theta)
+    one_minus_cos = 1 - cos_theta
 
-    c = math.cos(angle)
-    s = math.sin(angle)
-    t = 1 - c
+    u = unit_axis[0]  # Componente x
+    v = unit_axis[1]  # Componente y
+    w = unit_axis[2]  # Componente z
 
-    x=axis[0]
-    print("x: ",x)
-    y=axis[1]
-    z=axis[2]
-    x2 = x * x
-    y2 = y * y
-    z2 = z * z
+    uu = u * u
+    vv = v * v
+    ww = w * w
 
-    R= np.array([[t * x2 + c, t * x * y - s * z, t * x * z + s * y],
-                 [t * x * y + s * z, t * y2 + c, t * y * z - s * x],
-                 [t * x * z - s * y, t * y * z + s * x, t * z2 + c]])
+    # Crear la matriz de rotación
+    rotation_matrix = np.array([
+        [one_minus_cos * uu + cos_theta, one_minus_cos * u * v - sin_theta * w, one_minus_cos * u * w + sin_theta * v],
+        [one_minus_cos * u * v + sin_theta * w, one_minus_cos * vv + cos_theta, one_minus_cos * v * w - sin_theta * u],
+        [one_minus_cos * u * w - sin_theta * v, one_minus_cos * v * w + sin_theta * u, one_minus_cos * ww + cos_theta]
+    ])
 
-    
-    
-    print(R)
-    return R
+    print("Rotation Matrix:\n", rotation_matrix)
+    return rotation_matrix
 
-def Eaa2rotM(angle, axis):
+def Create_RotMa(theta, axis_vector):
     '''
-    Returns the rotation matrix R able to rotate vectors an angle 'angle' (in rads) about the axis 'axis'
+    Computes the rotation matrix that rotates vectors by an angle 'theta' (in radians) about the specified axis 'axis_vector'.
     '''
-    magnitud= magnitude(axis)
-    axis=axis/magnitud
+    # Normalize the axis vector
+    axis_length = Magnitude(axis_vector)
+    normalized_axis = axis_vector / axis_length
+
+    # Precompute trigonometric values
+    cos_theta = math.cos(theta)
+    sin_theta = math.sin(theta)
+    one_minus_cos = 1 - cos_theta
+
+    # Extract normalized axis components
+    u = normalized_axis[0]
+    v = normalized_axis[1]
+    w = normalized_axis[2]
+
+    # Compute the rotation matrix using the formula
+    rotation_matrix = np.array([
+        [one_minus_cos * u**2 + cos_theta, one_minus_cos * u * v - sin_theta * w, one_minus_cos * u * w + sin_theta * v],
+        [one_minus_cos * u * v + sin_theta * w, one_minus_cos * v**2 + cos_theta, one_minus_cos * v * w - sin_theta * u],
+        [one_minus_cos * u * w - sin_theta * v, one_minus_cos * v * w + sin_theta * u, one_minus_cos * w**2 + cos_theta]
+    ])
+
+    return rotation_matrix
+
+def Quat_RotMa(Q):
+    '''
+    Converts a quaternion Q into a 3x3 rotation matrix.
+    '''
+    # Normalize the quaternion
+    norm = math.sqrt(sum(component**2 for component in Q))
+    Q = [q / norm for q in Q]
+
+    # Extract components of the quaternion
+    w, x, y, z = Q
+
+    # Compute the elements of the rotation matrix
+    m00 = w**2 + x**2 - y**2 - z**2
+    m01 = 2 * (x * y - w * z)
+    m02 = 2 * (x * z + w * y)
+
+    m10 = 2 * (x * y + w * z)
+    m11 = w**2 - x**2 + y**2 - z**2
+    m12 = 2 * (y * z - w * x)
+
+    m20 = 2 * (x * z - w * y)
+    m21 = 2 * (y * z + w * x)
+    m22 = w**2 - x**2 - y**2 + z**2
+
+    # Assemble the rotation matrix
+    rotation_matrix = np.array([
+        [m00, m01, m02],
+        [m10, m11, m12],
+        [m20, m21, m22]
+    ])
+
+    return rotation_matrix
+
+def Two_Vectors_To_One(m0, m1):
     
-    # I= np.array([[1,0,0],
-    #             [0,1,0],
-    #             [0,0,1]])
-    # ux = np.array([[0, -axis[2,0], axis[1,0]], [axis[2,0], 0, -axis[0,0]], [-axis[1,0], axis[0,0], 0]])
-
-    # R= I*math.cos(angle)+(I-math.cos(angle))*(axis@np.transpose(axis))+ux*math.sin(angle)
-
-    c = math.cos(angle)
-    s = math.sin(angle)
-    t = 1 - c
-
-    x=axis[0]
-    y=axis[1]
-    z=axis[2]
-    x2 = x * x
-    y2 = y * y
-    z2 = z * z
-
-    R= np.array([[t * x2 + c, t * x * y - s * z, t * x * z + s * y],
-                 [t * x * y + s * z, t * y2 + c, t * y * z - s * x],
-                 [t * x * z - s * y, t * y * z + s * x, t * z2 + c]])
-    
-
-    
-
-    return R
-
-def quaternion_rotation_matrix(Q):
-
-    # Q = Q/np.linalg.norm(Q)
-    # print(Q)
-    # print(np.linalg.norm(Q))
-
-    #Normalitzem el cuaternio
-    magnitud = math.sqrt(Q[0]*Q[0] + Q[1]*Q[1] + Q[2]*Q[2] + Q[3]*Q[3])
-    Q= [Q[i]/magnitud for i in range(4)]
-
-    # Agafem els valors de Q
-    q0 = Q[0]
-    q1 = Q[1]
-    q2 = Q[2]
-    q3 = Q[3]
-     
-    # Primera fila de la matriu
-    r00 = q0**2 + q1**2 - q2**2 - q3**2
-    r01 = 2 * (q1 * q2 - q0 * q3)
-    r02 = 2 * (q1 * q3 + q0 * q2)
-
-    # Segona fila de la matriu
-    r10 = 2 * (q1 * q2 + q0 * q3)
-    r11 = q0**2 - q1**2 + q2**2 - q3**2
-    r12 = 2 * (q2 * q3 - q0 * q1)
-     
-    # Tercera fila de la matriu
-    r20 = 2 * (q1 * q3 - q0 * q2)
-    r21 = 2 * (q2 * q3 + q0 * q1)
-    r22 = q0**2 - q1**2 - q2**2 + q3**2
-    
-    # 3x3 rotation matrix
-    R = np.array([[r00, r01, r02],
-                  [r10, r11, r12],
-                  [r20, r21, r22]])
-
-    return R
-
-def quaternion_multiply(Q0,Q1):
- 
-    # Extract the values from Q0
-    w0 = Q0[0]
-    x0 = Q0[1]
-    y0 = Q0[2]
-    z0 = Q0[3]
-        
-    # Extract the values from Q1
-    w1 = Q1[0]
-    x1 = Q1[1]
-    y1 = Q1[2]
-    z1 = Q1[3]
-        
-    # Computer the product of the two quaternions, term by term
-    Q0Q1_w = w0 * w1 - x0 * x1 - y0 * y1 - z0 * z1
-    Q0Q1_x = w0 * x1 + x0 * w1 + y0 * z1 - z0 * y1
-    Q0Q1_y = w0 * y1 - x0 * z1 + y0 * w1 + z0 * x1
-    Q0Q1_z = w0 * z1 + x0 * y1 - y0 * x1 + z0 * w1
-        
-    # Create a 4 element array containing the final quaternion
-    final_quaternion = np.array([Q0Q1_w, Q0Q1_x, Q0Q1_y, Q0Q1_z])
-        
-    # Return a 4 element array containing the final quaternion (q02,q12,q22,q32) 
-    return final_quaternion
-def fromtwovectors(m0, m1):
-
-    #Metodo 1
-    # w = np.cross(np.transpose(m0), np.transpose(m1))
-    # q = np.array([np.dot(m0,m1), w[0], w[1], w[2]])
-    # q[1] += len(q)
-    # q[2] += len(q)
-    # q[3] += len(q)
-
-
-    w = np.cross(m0, m1)
-    q = np.array([1 + np.dot(m0, m1), w[0], w[1], w[2]])
-    
-    
-    #Metodo 2
-    # angle=math.acos(np.dot(m1,np.transpose(m0))/(magnitude(m0)*magnitude(m1)))
-    # print("angle: ",angle)
-    # q0=np.cos(angle/2)
-    # qx=np.sin(angle/2)*(np.cross(np.transpose(m0),np.transpose(m1))/(magnitude(np.cross(m0,m1))))
-    # print("qx: ",qx)
-    # q1=qx[0]
-    # q2=qx[1]
-    # q3=qx[2]
-    # q=np.array([q0,q1,q2,q3])
-
-    #Metodo 3
-    # q = np.append(np.cross(m0, m1), np.dot(m0, m1))
+    angle=math.acos(np.dot(m1,np.transpose(m0))/(Magnitude(m0)*Magnitude(m1)))
+    print("angle: ",angle)
+    q0=np.cos(angle/2)
+    qx=np.sin(angle/2)*(np.cross(np.transpose(m0),np.transpose(m1))/(Magnitude(np.cross(m0,m1))))
+    print("qx: ",qx)
+    q1=qx[0]
+    q2=qx[1]
+    q3=qx[2]
+    q=np.array([q0,q1,q2,q3])
 
     return q
 
-def magnitude(vector): 
+def Magnitude(vector): 
  return np.sqrt(sum(pow(element, 2) for element in vector))
 
-def creacvector_m(x,y):
+def Create_A_Vector(x,y):
     x2=x*x
     print("x2: ",x2)
     y2=y*y
     print("y2: ",y2)
     r2 = 4
     vex=np.array([y,r2/(2*np.sqrt(x2+y2)),-x])
-    vexmodule= magnitude(vex)
+    vexmodule= Magnitude(vex)
     if x2+y2<r2/2:
         m= np.array([y,abs(np.sqrt(r2-x2-y2)),-x])
     if x2+y2>=r2/2:
@@ -468,116 +436,63 @@ class Arcball(customtkinter.CTk):
         self.entry_RotM_33.configure(state="disabled")
         self.entry_RotM_33.grid(row=2, column=3, padx=(2,0), pady=(2,0), sticky="ew")
     
-    def actulizarRot(self,R):
+    def Rotation_Actualitation(self,R):
+        '''
+        Updates the GUI elements with the provided rotation matrix R and derived rotation data.
+        '''
+        # Update entries for the rotation matrix
+        for i in range(3):
+            for j in range(3):
+                entry = getattr(self, f"entry_RotM_{i+1}{j+1}")
+                entry.configure(state="normal")
+                entry.delete(0, "end")
+                entry.insert(0, str(R[i][j]))
+                entry.configure(state="disabled")
 
-            self.entry_RotM_11.configure(state="normal")
-            self.entry_RotM_11.delete(0,"end")
-            self.entry_RotM_11.insert(0,str(R[0][0]))
-            self.entry_RotM_11.configure(state="disabled")
+        # Define zero and identity matrices
+        zero_matrix = np.zeros((3, 3))
+        identity_matrix = np.eye(3)
 
-            self.entry_RotM_12.configure(state="normal")
-            self.entry_RotM_12.delete(0,"end")
-            self.entry_RotM_12.insert(0,str(R[0][1]))
-            self.entry_RotM_12.configure(state="disabled")
+        # Compute axis-angle representation
+        axis, angle = return_Axis_Amgle(R)
+        if np.array_equal(R, zero_matrix) or np.array_equal(R, identity_matrix):
+            axis = np.array([1, 0, 0])
 
-            self.entry_RotM_13.configure(state="normal")
-            self.entry_RotM_13.delete(0,"end")
-            self.entry_RotM_13.insert(0,str(R[0][2]))
-            self.entry_RotM_13.configure(state="disabled")
+        # Update axis-angle GUI elements
+        self.entry_AA_angle.delete(0, "end")
+        self.entry_AA_angle.insert(0, str(angle * 180 / np.pi))
+        for i, axis_value in enumerate(axis):
+            entry = getattr(self, f"entry_AA_ax{i+1}")
+            entry.delete(0, "end")
+            entry.insert(0, str(axis_value))
 
-            self.entry_RotM_21.configure(state="normal")
-            self.entry_RotM_21.delete(0,"end")
-            self.entry_RotM_21.insert(0,str(R[1][0]))
-            self.entry_RotM_21.configure(state="disabled")
+        # Compute rotation vector
+        self.r = angle * axis
+        for i, r_value in enumerate(self.r):
+            entry = getattr(self, f"entry_rotV_{i+1}")
+            entry.delete(0, "end")
+            entry.insert(0, str(r_value))
 
-            self.entry_RotM_22.configure(state="normal")
-            self.entry_RotM_22.delete(0,"end")
-            self.entry_RotM_22.insert(0,str(R[1][1]))
-            self.entry_RotM_22.configure(state="disabled")
+        # Compute yaw, pitch, roll and update entries
+        yaw, pitch, roll = rotMa_To_Yaw_Pitch_Roll(R)
+        self.entry_EA_yaw.delete(0, "end")
+        self.entry_EA_yaw.insert(0, str(yaw))
+        self.entry_EA_pitch.delete(0, "end")
+        self.entry_EA_pitch.insert(0, str(pitch))
+        self.entry_EA_roll.delete(0, "end")
+        self.entry_EA_roll.insert(0, str(roll))
 
-            self.entry_RotM_23.configure(state="normal")
-            self.entry_RotM_23.delete(0,"end")
-            self.entry_RotM_23.insert(0,str(R[1][2]))
-            self.entry_RotM_23.configure(state="disabled")
+        # Compute quaternion and update entries
+        qx = math.sin(angle / 2) * axis
+        Q = np.array([math.cos(angle / 2), qx[0], qx[1], qx[2]])
+        for i, q_value in enumerate(Q):
+            entry = getattr(self, f"entry_quat_{i}")
+            entry.delete(0, "end")
+            entry.insert(0, str(q_value))
 
-            self.entry_RotM_31.configure(state="normal")
-            self.entry_RotM_31.delete(0,"end")
-            self.entry_RotM_31.insert(0,str(R[2][0]))
-            self.entry_RotM_31.configure(state="disabled")
-
-            self.entry_RotM_32.configure(state="normal")
-            self.entry_RotM_32.delete(0,"end")
-            self.entry_RotM_32.insert(0,str(R[2][1]))
-            self.entry_RotM_32.configure(state="disabled")
-
-            self.entry_RotM_33.configure(state="normal")
-            self.entry_RotM_33.delete(0,"end")
-            self.entry_RotM_33.insert(0,str(R[2][2]))
-            self.entry_RotM_33.configure(state="disabled")
-
-            R0=np.array([[0.,0.,0],[0.,0.,0.],[0.,0.,0.]])
-            
-            Ri=np.array([[1.,0.,0],[0.,1.,0.],[0.,0.,1.]])
-
-          
-
-            
-            axis,angle=rotMat2Eaa(R)
-            if np.array_equal(R,R0):
-                axis=np.array([1,0,0])
-            if np.array_equal(R,Ri):
-                axis=np.array([1,0,0])
-
-               
-            
-            self.entry_AA_angle.delete(0,"end")
-            self.entry_AA_angle.insert(0,str(angle*180/np.pi))
-            self.entry_AA_ax1.delete(0,"end")
-            self.entry_AA_ax1.insert(0,str(axis[0]))
-            self.entry_AA_ax2.delete(0,"end")
-            self.entry_AA_ax2.insert(0,str(axis[1]))
-            self.entry_AA_ax3.delete(0,"end")
-            self.entry_AA_ax3.insert(0,str(axis[2]))
-
-            print("angle: ", angle)
-            self.r=angle*axis
-            print("r: ", self.r)
-
-           
-
-            yaw,pitch,roll=rotM2eAngles(R)
-
-            self.entry_EA_yaw.delete(0,"end")
-            self.entry_EA_yaw.insert(0,str(yaw))
-            self.entry_EA_pitch.delete(0,"end")
-            self.entry_EA_pitch.insert(0,str(pitch))
-            self.entry_EA_roll.delete(0,"end")
-            self.entry_EA_roll.insert(0,str(roll))
-
-            self.entry_rotV_1.delete(0,"end")
-            self.entry_rotV_1.insert(0,str(self.r[0]))
-            self.entry_rotV_2.delete(0,"end")
-            self.entry_rotV_2.insert(0,str(self.r[1]))
-            self.entry_rotV_3.delete(0,"end")
-            self.entry_rotV_3.insert(0,str(self.r[2]))
-            
-            qx=math.sin(angle)*axis
-            Q=np.array([math.cos(angle/2),qx[0],qx[1],qx[2]])
-
-            self.entry_quat_0.delete(0,"end")
-            self.entry_quat_0.insert(0,str(Q[0]))
-            self.entry_quat_1.delete(0,"end")
-            self.entry_quat_1.insert(0,str(Q[1]))
-            self.entry_quat_2.delete(0,"end")
-            self.entry_quat_2.insert(0,str(Q[2]))
-            self.entry_quat_3.delete(0,"end")
-            self.entry_quat_3.insert(0,str(Q[3]))
-            
-
-
-
-
-
+        # Print debug information
+        print("Angle:", angle)
+        print("Rotation Vector:", self.r)
 
     def resetbutton_pressed(self):
         """
@@ -593,48 +508,39 @@ class Arcball(customtkinter.CTk):
             [1,   1, -1],     #Node 6
             [1,  -1, -1]], dtype=float).transpose()
         R = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-        self.actulizarRot(R)
+        self.Rotation_Actualitation(R)
         self.update_cube() #Update the cube
-
-        self.Q=np.array([1.,0.,0.,0.])
-        # self.entry_AA_angle.delete(0,30)
-        # self.entry_AA_angle.insert(0,str(0))
-        # self.entry_AA_ax1.delete(0,30)
-        # self.entry_AA_ax1.insert(0,str(1))
-        # self.entry_AA_ax2.delete(0,30)
-        # self.entry_AA_ax2.insert(0,str(0))
-        # self.entry_AA_ax3.delete(0,30)
-        # self.entry_AA_ax3.insert(0,str(0))
-
-
-        # self.entry_rotV_1.delete(0,30)
-        # self.entry_rotV_1.insert(0,str(0))
-        # self.entry_rotV_2.delete(0,30)
-        # self.entry_rotV_2.insert(0,str(0))
-        # self.entry_rotV_3.delete(0,30)
-        # self.entry_rotV_3.insert(0,str(0))
         pass
 
     
     def apply_AA(self):
         """
-        Event triggered function on the event of a push on the button button_AA
+        Event handler for when the button button_AA is pressed.
+        Applies a rotation to the object based on the Axis-Angle parameters entered.
         """
-        #Example on hot to get values from entries:
-        angle =float(self.entry_AA_angle.get())*np.pi/180
-        axis1=float(self.entry_AA_ax1.get())
-        axis2=float(self.entry_AA_ax2.get())
-        axis3=float(self.entry_AA_ax3.get())
-        axis= np.array([axis1,axis2,axis3])
-        R=Eaa2rotM(angle,axis)
-        if axis1==float(0) and axis2==float(0) and axis3== float(0):
-         R= np.array([[1.,0.,0],[0.,1.,0.],[0.,0.,1.]])
-        self.actulizarRot(R)
-        self.M = R.dot(self.M) #Modify the vertices matrix with a rotation matrix M
-        self.update_cube() #Update the cube
+        # Retrieve angle and axis components from entries
+        angle = float(self.entry_AA_angle.get()) * np.pi / 180  # Convert to radians
+        axis = np.array([
+            float(self.entry_AA_ax1.get()),
+            float(self.entry_AA_ax2.get()),
+            float(self.entry_AA_ax3.get())
+        ])
+
+        # Compute the rotation matrix
+        if np.allclose(axis, 0):
+            R = np.eye(3)  # Identity matrix if the axis is zero
+        else:
+            R = Create_RotMa(angle, axis)
+
+        # Update rotation in the GUI and modify the object's transformation matrix
+        self.Rotation_Actualitation(R)
+        self.M = R @ self.M  # Update the transformation matrix
+        
+        # Update the visual representation of the object
+        self.update_cube()
         
 
-    
+
     def apply_rotV(self):
         """
         Event triggered function on the event of a push on the button button_rotV 
@@ -645,44 +551,71 @@ class Arcball(customtkinter.CTk):
         rot_vec[1]=float(self.entry_rotV_2.get())
         rot_vec[2]=float(self.entry_rotV_3.get())
         print("rotvec: ", rot_vec)
-        R=rot_vecToRotM(rot_vec)
+        R=vector_to_RotMa(rot_vec)
         if np.array_equal(rot_vec,r0):
            R= np.array([[1.,0.,0],[0.,1.,0.],[0.,0.,1.]])
-        self.actulizarRot(R)
+        self.Rotation_Actualitation(R)
         self.M = R.dot(self.M) #Modify the vertices matrix with a rotation matrix M
         self.update_cube() #Update the cube
+        pass
         pass
 
     
     def apply_EA(self):
         """
-        Event triggered function on the event of a push on the button button_EA
+        Event handler for when button_EA is pressed.
+        Applies a rotation to the object using Euler angles (yaw, pitch, roll) from user inputs.
         """
-        yaw=float(self.entry_EA_yaw.get())*np.pi/180
-        pitch=float(self.entry_EA_pitch.get())*np.pi/180
-        roll=float(self.entry_EA_roll.get())*np.pi/180
-        R=eAngles2rotM(yaw,pitch,roll)
-        self.M = R.dot(self.M) #Modify the vertices matrix with a rotation matrix M
-        self.actulizarRot(R)
-        print(R)
-        self.update_cube() #Update the cube
+        # Retrieve Euler angles from input fields and convert to radians
+        yaw_angle = float(self.entry_EA_yaw.get()) * np.pi / 180
+        pitch_angle = float(self.entry_EA_pitch.get()) * np.pi / 180
+        roll_angle = float(self.entry_EA_roll.get()) * np.pi / 180
+
+        # Compute the rotation matrix from Euler angles
+        rotation_matrix = Euler_Angles_to_Rot(yaw_angle, pitch_angle, roll_angle)
+
+        # Update the object's transformation matrix
+        self.M = rotation_matrix @ self.M
+
+        # Update the GUI with the new rotation matrix
+        self.Rotation_Actualitation(rotation_matrix)
+
+        # Print the resulting matrix for debugging
+        print(rotation_matrix)
+
+        # Refresh the cube visualization
+        self.update_cube()
         pass
 
     
     def apply_quat(self):
         """
-        Event triggered function on the event of a push on the button button_quat
+        Event handler for when button_quat is pressed.
+        Applies a rotation to the object using quaternion values from user inputs.
         """
-        q0=float(self.entry_quat_0.get())
-        q1=float(self.entry_quat_1.get())
-        q2=float(self.entry_quat_2.get())
-        q3=float(self.entry_quat_3.get())
-        Q=np.array([q0,q1,q2,q3])
-        R = quaternion_rotation_matrix(Q)
-        self.M = R.dot(self.M) #Modify the vertices matrix with a rotation matrix M
-        self.actulizarRot(R)
-        print(R)
-        self.update_cube() #Update the cube
+        # Retrieve quaternion components from input fields
+        quat_w = float(self.entry_quat_0.get())
+        quat_x = float(self.entry_quat_1.get())
+        quat_y = float(self.entry_quat_2.get())
+        quat_z = float(self.entry_quat_3.get())
+
+        # Form the quaternion as a numpy array
+        quaternion = np.array([quat_w, quat_x, quat_y, quat_z])
+
+        # Compute the rotation matrix from the quaternion
+        rotation_matrix = Quat_RotMa(quaternion)
+
+        # Update the object's transformation matrix
+        self.M = rotation_matrix @ self.M
+
+        # Update the GUI with the new rotation matrix
+        self.Rotation_Actualitation(rotation_matrix)
+
+        # Print the resulting matrix for debugging
+        print(rotation_matrix)
+
+        # Refresh the cube visualization
+        self.update_cube()
 
         pass
 
@@ -696,13 +629,10 @@ class Arcball(customtkinter.CTk):
 
         if event.button:
          x_fig,y_fig= self.canvas_coordinates_to_figure_coordinates(event.x,event.y) #Extract viewport coordinates
-         self.m0=creacvector_m(x_fig,y_fig)
+         self.m0=Create_A_Vector(x_fig,y_fig)
          print("m0: ",self.m0)
          self.pressed = True # Bool to control(activate) a drag (click+move)
             
-  
-           
-
     def onmove(self,event):
         """
         Event triggered function on the event of a mouse motion
@@ -712,14 +642,14 @@ class Arcball(customtkinter.CTk):
 
         if self.pressed: #Only triggered if previous click
             x_fig,y_fig= self.canvas_coordinates_to_figure_coordinates(event.x,event.y) #Extract viewport coordinates
-            self.m1=creacvector_m(x_fig,y_fig)
+            self.m1=Create_A_Vector(x_fig,y_fig)
             print("m1: ",self.m1)
             print("m0: ",self.m0)
-            self.Q=fromtwovectors(self.m0,self.m1)
+            self.Q=Two_Vectors_To_One(self.m0,self.m1)
             print(self.Q)
-            R=quaternion_rotation_matrix(self.Q)      
+            R=Quat_RotMa(self.Q)      
             self.M = R.dot(self.M) #Modify the vertices matrix with a rotation matrix M
-            self.actulizarRot(R)
+            self.Rotation_Actualitation(R)
             self.update_cube() #Update the cube
             self.m0=self.m1
 
